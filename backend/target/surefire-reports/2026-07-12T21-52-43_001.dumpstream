@@ -1,0 +1,5 @@
+# Created at 2026-07-12T21:52:44.252
+Boot Manifest-JAR contains absolute paths in classpath 'E:\Games\My Projects\Workspace 1\Cookie_Clicker_using_java\backend\target\test-classes'
+Hint: <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+'other' has different root
+
