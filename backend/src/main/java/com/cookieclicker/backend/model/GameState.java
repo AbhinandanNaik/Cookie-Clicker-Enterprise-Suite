@@ -41,6 +41,18 @@ public class GameState {
     @Column(name = "temples_count", nullable = false)
     private int templesCount = 0;
 
+    @Column(name = "achievements", nullable = true, length = 500)
+    private String achievements = "";
+
+    @Column(name = "cursors_boosted", nullable = false)
+    private boolean cursorsBoosted = false;
+
+    @Column(name = "grandmas_boosted", nullable = false)
+    private boolean grandmasBoosted = false;
+
+    @Column(name = "farms_boosted", nullable = false)
+    private boolean farmsBoosted = false;
+
     @Column(name = "last_saved_at", nullable = false)
     private long lastSavedAt;
 
@@ -53,14 +65,26 @@ public class GameState {
         this.lastSavedAt = System.currentTimeMillis();
     }
 
+    // Helper to calculate achievement count
+    public int getAchievementsCount() {
+        if (this.achievements == null || this.achievements.isBlank()) {
+            return 0;
+        }
+        return this.achievements.split(",").length;
+    }
+
     // Helper to calculate CPS on server side
     public double calculateCps() {
-        return (this.cursorsCount * 0.1) +
-               (this.grandmasCount * 1.0) +
-               (this.farmsCount * 8.0) +
-               (this.minesCount * 47.0) +
-               (this.factoriesCount * 260.0) +
-               (this.templesCount * 1400.0);
+        double baseCps = (this.cursorsCount * 0.1 * (this.cursorsBoosted ? 2.0 : 1.0)) +
+                         (this.grandmasCount * 1.0 * (this.grandmasBoosted ? 2.0 : 1.0)) +
+                         (this.farmsCount * 8.0 * (this.farmsBoosted ? 2.0 : 1.0)) +
+                         (this.minesCount * 47.0) +
+                         (this.factoriesCount * 260.0) +
+                         (this.templesCount * 1400.0);
+
+        // Each achievement grants +1% CPS boost
+        double multiplier = 1.0 + (getAchievementsCount() * 0.01);
+        return baseCps * multiplier;
     }
 
     // Getters and Setters
@@ -150,6 +174,38 @@ public class GameState {
 
     public void setTemplesCount(int templesCount) {
         this.templesCount = templesCount;
+    }
+
+    public String getAchievements() {
+        return achievements;
+    }
+
+    public void setAchievements(String achievements) {
+        this.achievements = achievements == null ? "" : achievements;
+    }
+
+    public boolean isCursorsBoosted() {
+        return cursorsBoosted;
+    }
+
+    public void setCursorsBoosted(boolean cursorsBoosted) {
+        this.cursorsBoosted = cursorsBoosted;
+    }
+
+    public boolean isGrandmasBoosted() {
+        return grandmasBoosted;
+    }
+
+    public void setGrandmasBoosted(boolean grandmasBoosted) {
+        this.grandmasBoosted = grandmasBoosted;
+    }
+
+    public boolean isFarmsBoosted() {
+        return farmsBoosted;
+    }
+
+    public void setFarmsBoosted(boolean farmsBoosted) {
+        this.farmsBoosted = farmsBoosted;
     }
 
     public long getLastSavedAt() {

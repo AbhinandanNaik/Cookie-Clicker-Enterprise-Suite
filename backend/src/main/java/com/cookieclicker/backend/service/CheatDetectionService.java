@@ -28,15 +28,22 @@ public class CheatDetectionService {
     }
 
     /**
-     * Calculates the player's "Net Worth" in cookies (current cookies + total spent on upgrades).
+     * Calculates the player's "Net Worth" in cookies (current cookies + total spent on upgrades/boosters).
      */
-    public double calculateNetWorth(double currentCookies, int cursors, int grandmas, int farms, int mines, int factories, int temples) {
+    public double calculateNetWorth(double currentCookies, int cursors, int grandmas, int farms, int mines, int factories, int temples,
+                                     boolean cursorsBoosted, boolean grandmasBoosted, boolean farmsBoosted) {
         double spent = getCumulativeCost(CURSOR_BASE_COST, cursors)
                 + getCumulativeCost(GRANDMA_BASE_COST, grandmas)
                 + getCumulativeCost(FARM_BASE_COST, farms)
                 + getCumulativeCost(MINE_BASE_COST, mines)
                 + getCumulativeCost(FACTORY_BASE_COST, factories)
                 + getCumulativeCost(TEMPLE_BASE_COST, temples);
+
+        // Add booster costs if active
+        if (cursorsBoosted) spent += 150.0;
+        if (grandmasBoosted) spent += 1000.0;
+        if (farmsBoosted) spent += 11000.0;
+
         return currentCookies + spent;
     }
 
@@ -71,13 +78,13 @@ public class CheatDetectionService {
             return false; // Exceeded click rate limit
         }
 
-        // Calculate click power based on Cursors
-        double clickPower = 1.0 + (proposed.getCursorsCount() * 0.1);
+        // Calculate click power based on Cursors and Cursor Booster
+        double clickPower = 1.0 + (proposed.getCursorsCount() * 0.1 * (proposed.isCursorsBoosted() ? 2.0 : 1.0));
         if (hasActiveFrenzy) {
             clickPower *= 777.0; // Golden cookie Click Frenzy multiplier
         }
 
-        // Calculate CPS of the proposed game state
+        // Calculate CPS of the proposed game state (which uses multipliers and boosters)
         double cps = proposed.calculateCps();
         double activeCps = hasActiveFrenzy ? cps * 7.0 : cps;
 
@@ -89,7 +96,10 @@ public class CheatDetectionService {
                 current.getFarmsCount(),
                 current.getMinesCount(),
                 current.getFactoriesCount(),
-                current.getTemplesCount()
+                current.getTemplesCount(),
+                current.isCursorsBoosted(),
+                current.isGrandmasBoosted(),
+                current.isFarmsBoosted()
         );
 
         double proposedNetWorth = calculateNetWorth(
@@ -99,7 +109,10 @@ public class CheatDetectionService {
                 proposed.getFarmsCount(),
                 proposed.getMinesCount(),
                 proposed.getFactoriesCount(),
-                proposed.getTemplesCount()
+                proposed.getTemplesCount(),
+                proposed.isCursorsBoosted(),
+                proposed.isGrandmasBoosted(),
+                proposed.isFarmsBoosted()
         );
 
         // Max possible cookies generated since last save

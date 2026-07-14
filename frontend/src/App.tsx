@@ -12,7 +12,9 @@ import {
   Flame, 
   Sparkles,
   BarChart2,
-  HelpCircle
+  HelpCircle,
+  Trophy,
+  Zap
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -23,6 +25,8 @@ import {
   Tooltip 
 } from 'recharts';
 import { sound } from './utils/sound';
+import CookieCanvas from './components/CookieCanvas';
+import type { CookieCanvasRef } from './components/CookieCanvas';
 
 // API Base URL (loads from build environments in Netlify, falls back to localhost)
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -43,6 +47,26 @@ const UPGRADES: Upgrade[] = [
   { id: 'mines', name: 'Mine', baseCost: 12000, cps: 47.0, icon: '⛏️' },
   { id: 'factories', name: 'Factory', baseCost: 130000, cps: 260.0, icon: '🏭' },
   { id: 'temples', name: 'Temple', baseCost: 1400000, cps: 1400.0, icon: '🕌' },
+];
+
+interface AchievementDef {
+  id: string;
+  name: string;
+  desc: string;
+  icon: string;
+  check: (state: { totalBaked: number; clicks: number; cursorsCount: number; grandmasCount: number; farmsCount: number; goldenClicks: number }) => boolean;
+}
+
+const ACHIEVEMENTS_LIST: AchievementDef[] = [
+  { id: 'bake_1', name: 'Wake and Bake', desc: 'Bake 1 cookie total.', icon: '🍳', check: s => s.totalBaked >= 1 },
+  { id: 'bake_100', name: 'Clicker Cadet', desc: 'Bake 100 cookies total.', icon: '🥉', check: s => s.totalBaked >= 100 },
+  { id: 'bake_10000', name: 'Cookie Tycoon', desc: 'Bake 10,000 cookies total.', icon: '🥈', check: s => s.totalBaked >= 10000 },
+  { id: 'bake_1000000', name: 'Cookie Monarch', desc: 'Bake 1,000,000 cookies total.', icon: '👑', check: s => s.totalBaked >= 1000000 },
+  { id: 'clicks_100', name: 'Finger Workout', desc: 'Click the big cookie 100 times.', icon: '⚡', check: s => s.clicks >= 100 },
+  { id: 'cursors_10', name: 'Clicking Factory', desc: 'Own 10 Cursors.', icon: '🖱️', check: s => s.cursorsCount >= 10 },
+  { id: 'grandmas_5', name: 'Retirement Home', desc: 'Own 5 Grandmas.', icon: '👵', check: s => s.grandmasCount >= 5 },
+  { id: 'farms_3', name: 'Green Thumb', desc: 'Own 3 Farms.', icon: '🌾', check: s => s.farmsCount >= 3 },
+  { id: 'golden_click', name: 'Golden Blessing', desc: 'Click a Golden Cookie.', icon: '🌟', check: s => s.goldenClicks >= 1 }
 ];
 
 interface LeaderboardEntry {
@@ -68,13 +92,14 @@ export default function App() {
   const [showAboutModal, setShowAboutModal] = useState(false);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'shop' | 'leaderboard' | 'analytics'>('shop');
+  const [activeTab, setActiveTab] = useState<'shop' | 'leaderboard' | 'analytics' | 'achievements'>('shop');
 
   // Game values
   const [cookies, setCookies] = useState<number>(0);
   const [clicks, setClicks] = useState<number>(0);
   const [totalBaked, setTotalBaked] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [goldenClicks, setGoldenClicks] = useState<number>(0);
 
   // Upgrades
   const [cursorsCount, setCursorsCount] = useState(0);
@@ -83,6 +108,15 @@ export default function App() {
   const [minesCount, setMinesCount] = useState(0);
   const [factoriesCount, setFactoriesCount] = useState(0);
   const [templesCount, setTemplesCount] = useState(0);
+
+  // Booster modifiers
+  const [cursorsBoosted, setCursorsBoosted] = useState(false);
+  const [grandmasBoosted, setGrandmasBoosted] = useState(false);
+  const [farmsBoosted, setFarmsBoosted] = useState(false);
+
+  // Achievements State
+  const [achievements, setAchievements] = useState<string>(''); // comma-separated unlocked achievements
+  const [activeToast, setActiveToast] = useState<{ name: string; desc: string; icon: string } | null>(null);
 
   // Visuals and Effects
   const [floatingTexts, setFloatingTexts] = useState<{ id: number; x: number; y: number; text: string }[]>([]);
@@ -95,8 +129,10 @@ export default function App() {
   const [cpsHistory, setCpsHistory] = useState<CpsHistoryPoint[]>([]);
   const [isOffline, setIsOffline] = useState(false);
 
-  // Refs for tracking animation frames & timing
+  // Refs for tracking animation frames, timing, and crumb canvas physics
   const lastTickRef = useRef<number>(Date.now());
+  const canvasRef = useRef<CookieCanvasRef>(null);
+
   const stateRef = useRef({
     cookies,
     clicks,
@@ -107,7 +143,11 @@ export default function App() {
     minesCount,
     factoriesCount,
     templesCount,
-    frenzyType
+    frenzyType,
+    achievements,
+    cursorsBoosted,
+    grandmasBoosted,
+    farmsBoosted
   });
 
   // Keep stateRef updated with fresh values
@@ -122,9 +162,13 @@ export default function App() {
       minesCount,
       factoriesCount,
       templesCount,
-      frenzyType
+      frenzyType,
+      achievements,
+      cursorsBoosted,
+      grandmasBoosted,
+      farmsBoosted
     };
-  }, [cookies, clicks, totalBaked, cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, frenzyType]);
+  }, [cookies, clicks, totalBaked, cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, frenzyType, achievements, cursorsBoosted, grandmasBoosted, farmsBoosted]);
 
   // Get Upgrade counts mapping helper
   const getUpgradeCount = (id: string) => {
@@ -157,22 +201,63 @@ export default function App() {
     return Math.floor(upgrade.baseCost * Math.pow(1.15, count));
   };
 
+  // Helper to split achievement strings
+  const getUnlockedList = () => {
+    return achievements ? achievements.split(',') : [];
+  };
+
   // Calculate CPS (Cookies Per Second)
   const calculateCps = () => {
-    const rawCps = (cursorsCount * 0.1) +
-                  (grandmasCount * 1.0) +
-                  (farmsCount * 8.0) +
+    const rawCps = (cursorsCount * 0.1 * (cursorsBoosted ? 2.0 : 1.0)) +
+                  (grandmasCount * 1.0 * (grandmasBoosted ? 2.0 : 1.0)) +
+                  (farmsCount * 8.0 * (farmsBoosted ? 2.0 : 1.0)) +
                   (minesCount * 47.0) +
                   (factoriesCount * 260.0) +
                   (templesCount * 1400.0);
-    return frenzyType === 'production' ? rawCps * 7.0 : rawCps;
+    
+    // Achievements global multiplier: each achievement adds +1% global CPS
+    const achievementMultiplier = 1.0 + (getUnlockedList().length * 0.01);
+    const boostedCps = rawCps * achievementMultiplier;
+
+    return frenzyType === 'production' ? boostedCps * 7.0 : boostedCps;
   };
 
   // Calculate Click Power
   const calculateClickPower = () => {
-    const basePower = 1 + (cursorsCount * 0.1);
+    // Reinforced index finger doubles clicking additions from cursors
+    const basePower = 1 + (cursorsCount * 0.1 * (cursorsBoosted ? 2.0 : 1.0));
     return frenzyType === 'click' ? basePower * 777.0 : basePower;
   };
+
+  // Achievements Trigger Check Loop
+  useEffect(() => {
+    const unlocked = getUnlockedList();
+    const stateSnapshot = {
+      totalBaked,
+      clicks,
+      cursorsCount,
+      grandmasCount,
+      farmsCount,
+      goldenClicks
+    };
+
+    ACHIEVEMENTS_LIST.forEach(ach => {
+      if (!unlocked.includes(ach.id) && ach.check(stateSnapshot)) {
+        // Unlock Achievement
+        const updated = achievements ? `${achievements},${ach.id}` : ach.id;
+        setAchievements(updated);
+        
+        // Notification effects
+        if (soundEnabled) sound.playAchievement();
+        setActiveToast({ name: ach.name, desc: ach.desc, icon: ach.icon });
+
+        // Hide notification toast after 4.5 seconds
+        setTimeout(() => {
+          setActiveToast(null);
+        }, 4500);
+      }
+    });
+  }, [totalBaked, clicks, cursorsCount, grandmasCount, farmsCount, goldenClicks, achievements, soundEnabled]);
 
   // Load game state
   useEffect(() => {
@@ -199,6 +284,10 @@ export default function App() {
         setMinesCount(data.minesCount);
         setFactoriesCount(data.factoriesCount);
         setTemplesCount(data.templesCount);
+        setAchievements(data.achievements || '');
+        setCursorsBoosted(data.cursorsBoosted || false);
+        setGrandmasBoosted(data.grandmasBoosted || false);
+        setFarmsBoosted(data.farmsBoosted || false);
         setIsOffline(false);
       })
       .catch(() => {
@@ -224,6 +313,10 @@ export default function App() {
       setMinesCount(data.minesCount || 0);
       setFactoriesCount(data.factoriesCount || 0);
       setTemplesCount(data.templesCount || 0);
+      setAchievements(data.achievements || '');
+      setCursorsBoosted(data.cursorsBoosted || false);
+      setGrandmasBoosted(data.grandmasBoosted || false);
+      setFarmsBoosted(data.farmsBoosted || false);
     }
   };
 
@@ -259,7 +352,7 @@ export default function App() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, frenzyType]);
+  }, [cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, frenzyType, cursorsBoosted, grandmasBoosted, farmsBoosted, achievements]);
 
   // Sync to Cloud Save every 10 seconds
   useEffect(() => {
@@ -277,7 +370,11 @@ export default function App() {
         minesCount: current.minesCount,
         factoriesCount: current.factoriesCount,
         templesCount: current.templesCount,
-        frenzyActive: current.frenzyType !== null
+        frenzyActive: current.frenzyType !== null,
+        achievements: current.achievements,
+        cursorsBoosted: current.cursorsBoosted,
+        grandmasBoosted: current.grandmasBoosted,
+        farmsBoosted: current.farmsBoosted
       };
 
       fetch(`${API_BASE}/game/state`, {
@@ -329,7 +426,7 @@ export default function App() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, frenzyType]);
+  }, [cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, frenzyType, cursorsBoosted, grandmasBoosted, farmsBoosted, achievements]);
 
   // Golden Cookie Spawner
   useEffect(() => {
@@ -361,9 +458,13 @@ export default function App() {
       farmsCount,
       minesCount,
       factoriesCount,
-      templesCount
+      templesCount,
+      achievements,
+      cursorsBoosted,
+      grandmasBoosted,
+      farmsBoosted
     });
-  }, [cookies, clicks, totalBaked, cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount]);
+  }, [cookies, clicks, totalBaked, cursorsCount, grandmasCount, farmsCount, minesCount, factoriesCount, templesCount, achievements, cursorsBoosted, grandmasBoosted, farmsBoosted]);
 
   // Handlers
   const handleCookieClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -386,6 +487,9 @@ export default function App() {
       { id: nextId, x, y, text: `+${power.toFixed(1)}` }
     ]);
 
+    // Trigger Canvas Crumb explosion physics
+    canvasRef.current?.spawnCrumbs(x, y);
+
     setTimeout(() => {
       setFloatingTexts(prev => prev.filter(t => t.id !== nextId));
     }, 800);
@@ -402,8 +506,21 @@ export default function App() {
     }
   };
 
+  const handleBuyBooster = (type: 'cursors' | 'grandmas' | 'farms', cost: number) => {
+    if (cookies >= cost) {
+      setCookies(c => c - cost);
+      if (type === 'cursors') setCursorsBoosted(true);
+      if (type === 'grandmas') setGrandmasBoosted(true);
+      if (type === 'farms') setFarmsBoosted(true);
+      if (soundEnabled) sound.playUpgrade();
+    } else {
+      if (soundEnabled) sound.playError();
+    }
+  };
+
   const handleGoldenCookieClick = () => {
     setGoldenCookie(null);
+    setGoldenClicks(c => c + 1);
     if (soundEnabled) sound.playGoldenCookie();
 
     const isClickFrenzy = Math.random() > 0.5;
@@ -711,6 +828,9 @@ export default function App() {
 
         <div className="cookie-container">
           <div className="cookie-glow"></div>
+          {/* Crumbs bursting physics canvas */}
+          <CookieCanvas ref={canvasRef} />
+          
           <button className="cookie-btn" onClick={handleCookieClick}>
             {/* BIG SVG COOKIE */}
             <svg 
@@ -771,28 +891,35 @@ export default function App() {
         </div>
       </div>
 
-      {/* RIGHT PANEL: Store, Leaderboard or Analytics Tab */}
+      {/* RIGHT PANEL: Store, Leaderboard, Achievements or Analytics Tab */}
       <div className="glass-panel right">
-        <div className="tab-header">
+        <div className="tab-header" style={{ overflowX: 'auto', whiteSpace: 'nowrap' }}>
           <button 
             className={`tab-btn ${activeTab === 'shop' ? 'active' : ''}`}
             onClick={() => setActiveTab('shop')}
           >
-            <Sparkles size={16} />
+            <Sparkles size={14} />
             Shop
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'achievements' ? 'active' : ''}`}
+            onClick={() => setActiveTab('achievements')}
+          >
+            <Trophy size={14} />
+            Awards
           </button>
           <button 
             className={`tab-btn ${activeTab === 'leaderboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('leaderboard')}
           >
-            <List size={16} />
+            <List size={14} />
             Ranks
           </button>
           <button 
             className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
             onClick={() => setActiveTab('analytics')}
           >
-            <BarChart2 size={16} />
+            <BarChart2 size={14} />
             Analytics
           </button>
         </div>
@@ -801,6 +928,68 @@ export default function App() {
           {/* TAB 1: UPGRADES SHOP */}
           {activeTab === 'shop' && (
             <div>
+              {/* Boosters Subsection */}
+              <div className="stats-header" style={{ marginBottom: '10px', fontSize: '15px' }}>
+                <Zap size={16} color="var(--color-accent)" />
+                <span>One-Time Modifiers</span>
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                {/* Reinforced Index Finger */}
+                <div 
+                  className={`upgrade-item ${cursorsBoosted ? 'disabled' : (cookies >= 150 ? '' : 'disabled')}`}
+                  onClick={() => !cursorsBoosted && handleBuyBooster('cursors', 150)}
+                >
+                  <div className="upgrade-icon">⚡</div>
+                  <div className="upgrade-info">
+                    <div className="upgrade-name">
+                      <span>Index Finger Upgrade</span>
+                      {cursorsBoosted && <span className="upgrade-count">Max</span>}
+                    </div>
+                    <div className="upgrade-stats">
+                      <span className="upgrade-cost Affordable">🪙 150</span>
+                      <span>Doubles Cursor CPS & click</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Forwards from Grandma */}
+                <div 
+                  className={`upgrade-item ${grandmasBoosted ? 'disabled' : (cookies >= 1000 ? '' : 'disabled')}`}
+                  onClick={() => !grandmasBoosted && handleBuyBooster('grandmas', 1000)}
+                >
+                  <div className="upgrade-icon">👵💬</div>
+                  <div className="upgrade-info">
+                    <div className="upgrade-name">
+                      <span>Email from Grandma</span>
+                      {grandmasBoosted && <span className="upgrade-count">Max</span>}
+                    </div>
+                    <div className="upgrade-stats">
+                      <span className="upgrade-cost Affordable">🪙 1,000</span>
+                      <span>Doubles Grandma CPS</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fertilizer */}
+                <div 
+                  className={`upgrade-item ${farmsBoosted ? 'disabled' : (cookies >= 11000 ? '' : 'disabled')}`}
+                  onClick={() => !farmsBoosted && handleBuyBooster('farms', 11000)}
+                >
+                  <div className="upgrade-icon">🧪</div>
+                  <div className="upgrade-info">
+                    <div className="upgrade-name">
+                      <span>Super Fertilizer</span>
+                      {farmsBoosted && <span className="upgrade-count">Max</span>}
+                    </div>
+                    <div className="upgrade-stats">
+                      <span className="upgrade-cost Affordable">🪙 11,000</span>
+                      <span>Doubles Farm CPS</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Standard Buildings Section */}
               <div className="stats-header" style={{ marginBottom: '15px' }}>
                 <Sparkles size={18} color="var(--color-primary)" />
                 <span>Asset Upgrades</span>
@@ -838,7 +1027,53 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: LEADERBOARD */}
+          {/* TAB 2: ACHIEVEMENTS AWARDS */}
+          {activeTab === 'achievements' && (
+            <div>
+              <div className="stats-header" style={{ marginBottom: '15px' }}>
+                <Trophy size={18} color="var(--color-accent)" />
+                <span>Unlocked Awards ({getUnlockedList().length} / {ACHIEVEMENTS_LIST.length})</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {ACHIEVEMENTS_LIST.map(ach => {
+                  const unlocked = getUnlockedList().includes(ach.id);
+                  return (
+                    <div 
+                      key={ach.id} 
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        background: unlocked ? 'rgba(168,85,247,0.06)' : 'rgba(255,255,255,0.01)',
+                        border: '1px solid',
+                        borderColor: unlocked ? 'rgba(168,85,247,0.25)' : 'var(--panel-border)',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        opacity: unlocked ? 1 : 0.4
+                      }}
+                    >
+                      <div style={{ fontSize: '28px', marginRight: '14px' }}>{ach.icon}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '14px', color: unlocked ? '#fff' : 'var(--text-secondary)' }}>
+                          {ach.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          {ach.desc}
+                        </div>
+                      </div>
+                      {unlocked && (
+                        <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 'bold' }}>
+                          +1% CPS
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: LEADERBOARD */}
           {activeTab === 'leaderboard' && (
             <div>
               <div className="stats-header" style={{ marginBottom: '15px' }}>
@@ -876,7 +1111,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: STATS CHARTS & GRAPHS */}
+          {/* TAB 4: STATS CHARTS & GRAPHS */}
           {activeTab === 'analytics' && (
             <div>
               <div className="stats-header" style={{ marginBottom: '15px' }}>
@@ -914,16 +1149,16 @@ export default function App() {
                 <div className="stat-label">Upgrade Value Weights</div>
                 <div style={{ fontSize: '14px', marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Cursors CPS:</span>
-                    <span style={{ fontWeight: 'bold' }}>{(cursorsCount * 0.1).toFixed(1)} CPS</span>
+                    <span>Cursors (Boosted: {cursorsBoosted ? 'Yes' : 'No'}):</span>
+                    <span style={{ fontWeight: 'bold' }}>{(cursorsCount * 0.1 * (cursorsBoosted ? 2 : 1)).toFixed(1)} CPS</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Grandmas CPS:</span>
-                    <span style={{ fontWeight: 'bold' }}>{(grandmasCount * 1.0).toFixed(1)} CPS</span>
+                    <span>Grandmas (Boosted: {grandmasBoosted ? 'Yes' : 'No'}):</span>
+                    <span style={{ fontWeight: 'bold' }}>{(grandmasCount * 1.0 * (grandmasBoosted ? 2 : 1)).toFixed(1)} CPS</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Farms CPS:</span>
-                    <span style={{ fontWeight: 'bold' }}>{(farmsCount * 8.0).toFixed(1)} CPS</span>
+                    <span>Farms (Boosted: {farmsBoosted ? 'Yes' : 'No'}):</span>
+                    <span style={{ fontWeight: 'bold' }}>{(farmsCount * 8.0 * (farmsBoosted ? 2 : 1)).toFixed(1)} CPS</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Mines/Factories/Temples CPS:</span>
@@ -937,6 +1172,42 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* Floating Achievements unlock Toast Popup */}
+      {activeToast && (
+        <div 
+          style={{
+            position: 'fixed',
+            bottom: '25px',
+            right: '25px',
+            background: 'rgba(20, 18, 36, 0.95)',
+            border: '2px solid var(--color-accent)',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(234,179,8,0.2)',
+            zIndex: 99999,
+            maxWidth: '350px',
+            animation: 'alertPulse 0.5s ease-out'
+          }}
+        >
+          <div style={{ fontSize: '32px' }}>{activeToast.icon}</div>
+          <div>
+            <div style={{ color: 'var(--color-accent)', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Achievement Unlocked!
+            </div>
+            <div style={{ fontWeight: 800, color: '#fff', fontSize: '15px', marginTop: '2px' }}>
+              {activeToast.name}
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px' }}>
+              {activeToast.desc} (+1% Global CPS)
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

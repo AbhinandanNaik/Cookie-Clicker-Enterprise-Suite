@@ -10,5 +10,9 @@ public record GameStateDto(
         int minesCount,
         int factoriesCount,
         int templesCount,
-        Boolean frenzyActive
+        Boolean frenzyActive,
+        String achievements,
+        boolean cursorsBoosted,
+        boolean grandmasBoosted,
+        boolean farmsBoosted
 ) {}

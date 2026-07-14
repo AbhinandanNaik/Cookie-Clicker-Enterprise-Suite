@@ -46,6 +46,10 @@ public class GameStateService {
         current.setMinesCount(proposed.getMinesCount());
         current.setFactoriesCount(proposed.getFactoriesCount());
         current.setTemplesCount(proposed.getTemplesCount());
+        current.setAchievements(proposed.getAchievements());
+        current.setCursorsBoosted(proposed.isCursorsBoosted());
+        current.setGrandmasBoosted(proposed.isGrandmasBoosted());
+        current.setFarmsBoosted(proposed.isFarmsBoosted());
         current.setLastSavedAt(System.currentTimeMillis());
 
         return gameStateRepository.save(current);

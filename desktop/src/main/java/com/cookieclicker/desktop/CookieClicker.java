@@ -41,6 +41,12 @@ public class CookieClicker extends JFrame {
     private int factories = 0;
     private int temples = 0;
 
+    // Boosters and achievements
+    private String achievements = "";
+    private boolean cursorsBoosted = false;
+    private boolean grandmasBoosted = false;
+    private boolean farmsBoosted = false;
+
     // Network State
     private String jwtToken = null;
     private String username = "Guest";
@@ -305,7 +311,7 @@ public class CookieClicker extends JFrame {
 
     // Game Core Operations
     private void clickCookie() {
-        double power = 1.0 + (cursors * 0.1);
+        double power = 1.0 + (cursors * 0.1 * (cursorsBoosted ? 2.0 : 1.0));
         cookies += power;
         totalBaked += power;
         clicks++;
@@ -353,12 +359,15 @@ public class CookieClicker extends JFrame {
     }
 
     private double calculateCps() {
-        return (cursors * 0.1) +
-               (grandmas * 1.0) +
-               (farms * 8.0) +
-               (mines * 47.0) +
-               (factories * 260.0) +
-               (temples * 1400.0);
+        double baseCps = (cursors * 0.1 * (cursorsBoosted ? 2.0 : 1.0)) +
+                         (grandmas * 1.0 * (grandmasBoosted ? 2.0 : 1.0)) +
+                         (farms * 8.0 * (farmsBoosted ? 2.0 : 1.0)) +
+                         (mines * 47.0) +
+                         (factories * 260.0) +
+                         (temples * 1400.0);
+        int count = (achievements == null || achievements.isBlank()) ? 0 : achievements.split(",").length;
+        double multiplier = 1.0 + (count * 0.01);
+        return baseCps * multiplier;
     }
 
     private void updateLabels() {
@@ -495,6 +504,10 @@ public class CookieClicker extends JFrame {
                     mines = dto.minesCount;
                     factories = dto.factoriesCount;
                     temples = dto.templesCount;
+                    achievements = dto.achievements == null ? "" : dto.achievements;
+                    cursorsBoosted = dto.cursorsBoosted;
+                    grandmasBoosted = dto.grandmasBoosted;
+                    farmsBoosted = dto.farmsBoosted;
 
                     SwingUtilities.invokeLater(() -> {
                         updateLabels();
@@ -511,8 +524,8 @@ public class CookieClicker extends JFrame {
         if (jwtToken == null) return;
         try {
             String payload = String.format(java.util.Locale.US,
-                "{\"cookies\":%.2f,\"clicks\":%d,\"totalBaked\":%.2f,\"cursorsCount\":%d,\"grandmasCount\":%d,\"farmsCount\":%d,\"minesCount\":%d,\"factoriesCount\":%d,\"templesCount\":%d}",
-                cookies, clicks, totalBaked, cursors, grandmas, farms, mines, factories, temples
+                "{\"cookies\":%.2f,\"clicks\":%d,\"totalBaked\":%.2f,\"cursorsCount\":%d,\"grandmasCount\":%d,\"farmsCount\":%d,\"minesCount\":%d,\"factoriesCount\":%d,\"templesCount\":%d,\"achievements\":\"%s\",\"cursorsBoosted\":%b,\"grandmasBoosted\":%b,\"farmsBoosted\":%b}",
+                cookies, clicks, totalBaked, cursors, grandmas, farms, mines, factories, temples, achievements, cursorsBoosted, grandmasBoosted, farmsBoosted
             );
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -579,6 +592,10 @@ public class CookieClicker extends JFrame {
             dto.minesCount = mines;
             dto.factoriesCount = factories;
             dto.templesCount = temples;
+            dto.achievements = achievements;
+            dto.cursorsBoosted = cursorsBoosted;
+            dto.grandmasBoosted = grandmasBoosted;
+            dto.farmsBoosted = farmsBoosted;
 
             gson.toJson(dto, writer);
         } catch (Exception e) {
@@ -601,6 +618,10 @@ public class CookieClicker extends JFrame {
                 this.mines = dto.minesCount;
                 this.factories = dto.factoriesCount;
                 this.temples = dto.templesCount;
+                this.achievements = dto.achievements == null ? "" : dto.achievements;
+                this.cursorsBoosted = dto.cursorsBoosted;
+                this.grandmasBoosted = dto.grandmasBoosted;
+                this.farmsBoosted = dto.farmsBoosted;
             }
         } catch (Exception e) {
             System.err.println("Could not load local save: " + e);
@@ -618,6 +639,10 @@ public class CookieClicker extends JFrame {
         int minesCount;
         int factoriesCount;
         int templesCount;
+        String achievements;
+        boolean cursorsBoosted;
+        boolean grandmasBoosted;
+        boolean farmsBoosted;
     }
 
     private static class LeaderboardDto {

@@ -41,7 +41,11 @@ public class GameStateController {
                 state.getMinesCount(),
                 state.getFactoriesCount(),
                 state.getTemplesCount(),
-                false // frenzyActive is request-only for validation check
+                false, // frenzyActive is request-only for validation check
+                state.getAchievements(),
+                state.isCursorsBoosted(),
+                state.isGrandmasBoosted(),
+                state.isFarmsBoosted()
         );
     }
 
@@ -56,6 +60,10 @@ public class GameStateController {
         state.setMinesCount(dto.minesCount());
         state.setFactoriesCount(dto.factoriesCount());
         state.setTemplesCount(dto.templesCount());
+        state.setAchievements(dto.achievements());
+        state.setCursorsBoosted(dto.cursorsBoosted());
+        state.setGrandmasBoosted(dto.grandmasBoosted());
+        state.setFarmsBoosted(dto.farmsBoosted());
         return state;
     }
 
