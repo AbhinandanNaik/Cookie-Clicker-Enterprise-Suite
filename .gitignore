@@ -1,2 +1,27 @@
-# Project exclude paths
-/out/
+# Compiled Java class files
+**/target/
+*.class
+
+# Databases
+**/data/
+*.db
+*.trace.db
+*.mv.db
+
+# IDE settings
+.idea/
+*.iml
+
+# Node / Web dependencies
+**/node_modules/
+**/dist/
+.env
+.env.local
+.env.production
+.eslintcache
+.stylelintcache
+
+# Local caches and logs
+*.log
+.DS_Store
+Thumbs.db
