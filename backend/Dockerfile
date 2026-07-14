@@ -11,5 +11,4 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/target/backend-*.jar app.jar
 EXPOSE 8080
-VOLUME /app/data
 ENTRYPOINT ["java", "-jar", "app.jar"]
