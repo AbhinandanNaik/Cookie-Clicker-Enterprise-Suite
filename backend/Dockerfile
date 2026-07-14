@@ -9,6 +9,8 @@ RUN mvn clean package -DskipTests -B
 # --- Run Stage ---
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+# Explicitly create data directory with full write permissions for non-root users
+RUN mkdir -p /app/data && chmod 777 /app/data
 COPY --from=build /app/target/backend-*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
