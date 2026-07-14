@@ -24,8 +24,8 @@ import {
 } from 'recharts';
 import { sound } from './utils/sound';
 
-// API Base URL
-const API_BASE = 'http://localhost:8080/api';
+// API Base URL (loads from build environments in Netlify, falls back to localhost)
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 // Upgrade Specifications
 interface Upgrade {
